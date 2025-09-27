@@ -1,5 +1,101 @@
+use std::convert::{From, Into};
 use std::fmt;
 
+/// `Cell` represents the basic unit of `Grid`.
+///
+/// Consists of coordinates x: u8 and y: u8, alongside with methods implementing
+/// common mathematical operations for safe interactions with grids and other cells
+///
+/// Due to low memory size implements `Copy` trait, so all methods take `self` (copy) as first argument
+///
+/// # Examples
+///
+/// You can create Cell using new():
+/// ```
+/// use grid_math::Cell;
+///
+/// let cell = Cell::new(10, 15);
+/// ```
+///
+/// Or use functionality of implemented `From` and `Into` traits:
+/// ```
+/// use grid_math::Cell;
+///
+/// let cell = Cell::from((9, 9));
+/// let cell: Cell = (6, 7).into();
+/// ```
+///
+/// To read x or y values, use getters:
+/// ```
+/// use grid_math::Cell;
+///
+/// let cell = Cell::new(10, 10);
+/// let x = cell.x();
+/// let y = cell.y();
+/// ```
+/// Or use `into()` provided by `Into` trait:
+/// ```
+/// use grid_math::Cell;
+///
+/// let cell = Cell::new(10, 10);
+/// let (x, y): (u8, u8) = cell.into();
+/// ```
+///
+/// Other methods involve interactions with `Grid`
+///
+/// `Cell` is designed to not mutate it's contents.
+/// Instead, all operations return new instances of `Cell`
+///
+/// Also worth noting, that all operations on `Cell` are verified to be logically correct,
+/// otherwise logically incorrect operations will be met with panic!
+///
+/// Here is a brief overview of `Cell` and `Grid` interactions:
+///
+/// Check if `Cell` is within the `Grid`:
+/// ```
+/// use grid_math::{Cell, Grid};
+///
+/// let cell = Cell::new(3, 4);
+/// let grid = Grid::new(10, 10); // 10x10 grid starting at (0,0)
+/// assert!(cell.within(grid));
+/// ```
+///
+/// Get relative to the `Grid` position of `Cell`:
+/// (`Grid` can start not only from (0,0))
+/// ```
+/// use grid_math::{Cell, Grid};
+///
+/// let cell = Cell::new(3, 4);
+/// let grid = Grid::indented(8, 8, (2, 1)); // 8x8 grid starting at (2,1)
+/// let (width, depth) = (cell.width(grid), cell.depth(grid));
+/// // cell's width on grid = cell.x - grid.start.x
+/// // cell's depth on grid = cell.y - grid.start.y
+/// assert_eq!((width, depth), (1, 3));
+/// // get gaps between width and depth grid borders and cell:
+/// let (width_gap, depth_gap) = (cell.width_gap(grid), cell.depth_gap(grid));
+/// assert_eq!((width_gap, depth_gap), (6, 4));
+/// // get member of grid by relative position:
+/// let member = grid.member(width, depth);
+/// assert_eq!(cell, member);
+/// ```
+///
+/// Perform some move calculations of `Cell` on `Grid`:
+/// ```
+/// use grid_math::{Cell, Grid};
+///
+/// let grid = Grid::new(10, 10);
+/// let cell = grid.start(); // get grid's first cell
+/// let next = cell.right(grid, 3); // move to the right by 3, panics if grid bounds overflow occures
+/// assert_eq!(next, Cell::new(3, 0));
+/// let next = cell.saturating_down(grid, 15); // move down by 15, returns grid bound if overflow occures
+/// assert_eq!(next, Cell::new(0, 9));
+/// let next = cell.wrapping_right(grid, 5).left(grid, 2).project_down(grid); // chain of movements
+/// assert_eq!(next, Cell::new(3, 9));
+/// ```
+///
+/// To get more examples, look at `Cell` and `Grid` methods documentation.
+///
+///
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
     x: u8,
@@ -296,8 +392,27 @@ impl fmt::Display for Cell {
     }
 }
 
+impl From<(u8, u8)> for Cell {
+    fn from(value: (u8, u8)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
+        }
+    }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<(u8, u8)> for Cell {
+    fn into(self) -> (u8, u8) {
+        (self.x, self.y)
+    }
+}
+
 impl Grid {
     pub fn new(width: u8, depth: u8) -> Self {
+        if width < 1 || depth < 1 {
+            panic!("can't create grid with width < 0 or depth < 0!")
+        }
         Self {
             start: Cell { x: 0, y: 0 },
             end: Cell {
@@ -307,35 +422,50 @@ impl Grid {
         }
     }
 
-    pub fn from(start: Cell, end: Cell) -> Self {
-        if start.x > end.x || start.y > end.y {
-            panic!("start cell overflows end cell! start:{start}, end:{end}")
+    pub fn indented(width: u8, depth: u8, indent: (u8, u8)) -> Self {
+        if width < 1 || depth < 1 {
+            panic!("can't create grid with width < 0 or depth < 0!")
         }
-        Self { start, end }
+        Self {
+            start: Cell {
+                x: indent.0,
+                y: indent.1,
+            },
+            end: Cell {
+                x: indent.0 + width - 1,
+                y: indent.1 + depth - 1,
+            },
+        }
     }
 
     pub fn within(self, grid: Grid) -> bool {
         self.start.within(grid) && self.end.within(grid)
     }
 
-    pub fn member(self, cell: Cell) -> Cell {
-        self.start.right(self, cell.x).down(self, cell.y)
+    pub fn member(self, width: u8, depth: u8) -> Cell {
+        self.start.right(self, width).down(self, depth)
     }
 
-    pub fn area(self, cell: Cell) -> Grid {
+    pub fn area(self, width: u8, depth: u8) -> Grid {
+        if width < 1 || depth < 1 {
+            panic!("can't create grid with width < 0 or depth < 0!")
+        }
         Grid {
             start: self.start,
-            end: self.start.right(self, cell.x).down(self, cell.y),
+            end: self.start.right(self, width - 1).down(self, depth - 1),
         }
     }
 
-    pub fn slice(self, grid: Grid) -> Grid {
+    pub fn slice(self, width: u8, depth: u8, indent: (u8, u8)) -> Grid {
+        if width < 1 || depth < 1 {
+            panic!("can't create grid with width < 0 or depth < 0!")
+        }
         Grid {
-            start: self
+            start: self.start.right(self, indent.0).down(self, indent.1),
+            end: self
                 .start
-                .right(self, grid.start.x)
-                .down(self, grid.start.y),
-            end: self.start.right(self, grid.end.x).down(self, grid.end.y),
+                .right(self, indent.0 + width - 1)
+                .down(self, indent.1 + depth - 1),
         }
     }
 
@@ -369,6 +499,40 @@ impl Grid {
 
     pub fn columns(self) -> Columns {
         Columns::from(self)
+    }
+}
+
+impl From<(Cell, Cell)> for Grid {
+    fn from(value: (Cell, Cell)) -> Self {
+        let (start, end) = value;
+        if start.x > end.x || start.y > end.y {
+            panic!("start cell overflows end cell! start:{start}, end:{end}")
+        }
+        Self { start, end }
+    }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<(Cell, Cell)> for Grid {
+    fn into(self) -> (Cell, Cell) {
+        (self.start, self.end)
+    }
+}
+
+impl From<((u8, u8), (u8, u8))> for Grid {
+    fn from(value: ((u8, u8), (u8, u8))) -> Self {
+        let (start, end): (Cell, Cell) = (value.0.into(), value.1.into());
+        if start.x > end.x || start.y > end.y {
+            panic!("start cell overflows end cell! start:{start}, end:{end}")
+        }
+        Self { start, end }
+    }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<((u8, u8), (u8, u8))> for Grid {
+    fn into(self) -> ((u8, u8), (u8, u8)) {
+        (self.start.into(), self.end.into())
     }
 }
 
@@ -481,15 +645,28 @@ mod tests {
         println!("Cell: {cell}");
         assert_eq!(cell.x(), 10);
         assert_eq!(cell.y(), 12);
+        let cell_1 = Cell::from((5, 6));
+        let cell_2: Cell = (5, 6).into();
+        assert_eq!(cell_1, cell_2);
+        let (x, y): (u8, u8) = cell.into();
+        assert_eq!(x, 10);
+        assert_eq!(y, 12);
     }
 
     #[test]
     fn cell_on_grid() {
         let grid = Grid::new(11, 18);
-        let other_grid = Grid::from(Cell::new(2, 3), Cell::new(7, 7));
-        let slice = grid.slice(other_grid);
-        let slice_member = slice.member(Cell::new(3, 4));
-        println!("{slice_member}");
+        println!("Grid: {grid}");
+        assert_eq!(grid.width(), 11);
+        assert_eq!(grid.depth(), 18);
+        let cell = grid.member(3, 2);
+        let area = grid.area(10, 9);
+        let slice_from_area = area.slice(5, 5, cell.into());
+        println!("5x5 slice from area with indent = {cell}:  {slice_from_area}");
+        // let other_grid = Grid::from(Cell::new(2, 3), Cell::new(7, 7));
+        // let slice = grid.slice(other_grid);
+        // let slice_member = slice.member(Cell::new(3, 4));
+        // println!("{slice_member}");
     }
 
     #[test]
