@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
     x: u8,
@@ -41,6 +43,12 @@ impl Cell {
             && (grid.start.y..=grid.end.y).contains(&self.y)
     }
 
+    pub fn within_panic(self, grid: Grid) {
+        if !self.within(grid) {
+            panic!("cell is not within given grid! cell:{self}, grid:{grid}")
+        }
+    }
+
     pub fn x(self) -> u8 {
         self.x
     }
@@ -50,37 +58,49 @@ impl Cell {
     }
 
     pub fn width(self, grid: Grid) -> u8 {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
+        self.within_panic(grid);
         self.x - grid.start.x
     }
 
     pub fn width_gap(self, grid: Grid) -> u8 {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
+        self.within_panic(grid);
         grid.end.x - self.x
     }
 
     pub fn depth(self, grid: Grid) -> u8 {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
+        self.within_panic(grid);
         self.y - grid.start.y
     }
 
     pub fn depth_gap(self, grid: Grid) -> u8 {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
+        self.within_panic(grid);
         grid.end.y - self.y
     }
 
-    pub fn up(self, step: u8) -> Cell {
-        if self.y < step {
+    pub fn will_underflow_depth(self, grid: Grid, step: u8) -> bool {
+        self.within_panic(grid);
+        self.y < step || self.y - step < grid.start.y
+    }
+
+    pub fn will_overflow_depth(self, grid: Grid, step: u8) -> bool {
+        self.within_panic(grid);
+        self.y > u8::MAX - step || self.y + step > grid.end.y
+    }
+
+    pub fn will_underflow_width(self, grid: Grid, step: u8) -> bool {
+        self.within_panic(grid);
+        self.x < step || self.x - step < grid.start.x
+    }
+
+    pub fn will_overflow_width(self, grid: Grid, step: u8) -> bool {
+        self.within_panic(grid);
+        self.x > u8::MAX - step || self.x + step > grid.end.x
+    }
+
+    pub fn up(self, grid: Grid, step: u8) -> Cell {
+        if self.will_underflow_depth(grid, step) {
             panic!(
-                "(self.y - step) will overflow u8 bounds! Try using wrapping_up or saturating_up with grid specification"
+                "this operation will violate grid upper bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
@@ -89,10 +109,10 @@ impl Cell {
         }
     }
 
-    pub fn down(self, step: u8) -> Cell {
-        if self.y > u8::MAX - step {
+    pub fn down(self, grid: Grid, step: u8) -> Cell {
+        if self.will_overflow_depth(grid, step) {
             panic!(
-                "(self.y + step) will overflow u8 bounds! Try using wrapping_down or saturating_down with grid specification"
+                "this operation will violate grid lower bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
@@ -101,10 +121,10 @@ impl Cell {
         }
     }
 
-    pub fn left(self, step: u8) -> Cell {
-        if self.x < step {
+    pub fn left(self, grid: Grid, step: u8) -> Cell {
+        if self.will_underflow_width(grid, step) {
             panic!(
-                "(self.x - step) will overflow u8 bounds! Try using wrapping_left or saturating_left with grid specification"
+                "this operation will violate grid left bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
@@ -113,44 +133,16 @@ impl Cell {
         }
     }
 
-    pub fn right(self, step: u8) -> Cell {
-        if self.x > u8::MAX - step {
+    pub fn right(self, grid: Grid, step: u8) -> Cell {
+        if self.will_overflow_width(grid, step) {
             panic!(
-                "(self.x + step) will overflow u8 bounds! Try using wrapping_right or saturating_right with grid specification"
+                "this operation will violate grid right bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
             x: self.x + step,
             y: self.y,
         }
-    }
-
-    pub fn will_underflow_depth(self, grid: Grid, step: u8) -> bool {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
-        self.y < step || self.y - step < grid.start.y
-    }
-
-    pub fn will_overflow_depth(self, grid: Grid, step: u8) -> bool {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
-        self.y > u8::MAX - step || self.y + step > grid.end.y
-    }
-
-    pub fn will_underflow_width(self, grid: Grid, step: u8) -> bool {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
-        self.x < step || self.x - step < grid.start.x
-    }
-
-    pub fn will_overflow_width(self, grid: Grid, step: u8) -> bool {
-        if !self.within(grid) {
-            panic!("point is not within given grid!")
-        }
-        self.x > u8::MAX - step || self.x + step > grid.end.x
     }
 
     pub fn saturating_up(self, grid: Grid, step: u8) -> Cell {
@@ -298,6 +290,12 @@ impl Cell {
     }
 }
 
+impl fmt::Display for Cell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({x}, {y})", x = self.x, y = self.y)
+    }
+}
+
 impl Grid {
     pub fn new(width: u8, depth: u8) -> Self {
         Self {
@@ -311,15 +309,33 @@ impl Grid {
 
     pub fn from(start: Cell, end: Cell) -> Self {
         if start.x > end.x || start.y > end.y {
-            panic!("start point overflows end point!")
+            panic!("start cell overflows end cell! start:{start}, end:{end}")
         }
         Self { start, end }
     }
 
-    pub fn member(self, x: u8, y: u8) -> Cell {
-        Cell {
-            x: self.start.x + x,
-            y: self.start.y + y,
+    pub fn within(self, grid: Grid) -> bool {
+        self.start.within(grid) && self.end.within(grid)
+    }
+
+    pub fn member(self, cell: Cell) -> Cell {
+        self.start.right(self, cell.x).down(self, cell.y)
+    }
+
+    pub fn area(self, cell: Cell) -> Grid {
+        Grid {
+            start: self.start,
+            end: self.start.right(self, cell.x).down(self, cell.y),
+        }
+    }
+
+    pub fn slice(self, grid: Grid) -> Grid {
+        Grid {
+            start: self
+                .start
+                .right(self, grid.start.x)
+                .down(self, grid.start.y),
+            end: self.start.right(self, grid.end.x).down(self, grid.end.y),
         }
     }
 
@@ -353,6 +369,12 @@ impl Grid {
 
     pub fn columns(self) -> Columns {
         Columns::from(self)
+    }
+}
+
+impl fmt::Display for Grid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{start}:{end}]", start = self.start, end = self.end)
     }
 }
 
@@ -454,6 +476,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn basic_cell() {
+        let cell = Cell::new(10, 12);
+        println!("Cell: {cell}");
+        assert_eq!(cell.x(), 10);
+        assert_eq!(cell.y(), 12);
+    }
+
+    #[test]
+    fn cell_on_grid() {
+        let grid = Grid::new(11, 18);
+        let other_grid = Grid::from(Cell::new(2, 3), Cell::new(7, 7));
+        let slice = grid.slice(other_grid);
+        let slice_member = slice.member(Cell::new(3, 4));
+        println!("{slice_member}");
+    }
+
+    #[test]
     fn cells() {
         let my_grid = Grid::new(5, 5);
         let printed_grid: String = my_grid
@@ -467,6 +506,7 @@ mod tests {
             })
             .collect();
         println!("\nMAP:\n{printed_grid}");
+        println!("Grid: {my_grid}");
     }
 
     #[test]
