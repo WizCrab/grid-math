@@ -280,7 +280,7 @@ pub struct Grid {
     end: Cell,
 }
 
-/// `Cells` is an iterator over every `Cell` on `Grid`
+/// `Cells` represents an iterator over every `Cell` on the `Grid`
 ///
 /// # Examples
 ///
@@ -312,7 +312,7 @@ pub struct Cells {
     consumed: bool,
 }
 
-/// `Rows` is an iterator over every row of `Cell` on `Grid`
+/// `Rows` represents an iterator over every row of `Cell` on the `Grid`
 ///
 /// Every element of 'Rows' returns `Grid`
 ///
@@ -350,7 +350,7 @@ pub struct Rows {
     consumed: bool,
 }
 
-/// `Columns` is an iterator over every column of `Cell` on `Grid`
+/// `Columns` represents an iterator over every column of `Cell` on the `Grid`
 ///
 /// Every element of 'Columns' returns `Grid`
 ///
@@ -1075,34 +1075,186 @@ impl Cell {
         )
     }
 
+    /// Moves current `Cell` upwards by `step` relative to the given `Grid`
+    ///
+    /// This operation is a wrapper around the `overflowing_up()` method,
+    /// and returns only new `Cell`, without `bool`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(2, 2);
+    /// let next = cell.wrapping_up(grid, 2);
+    /// assert_eq!(next, Cell::new(2, 0));
+    /// let next = cell.wrapping_up(grid, 5);
+    /// assert_eq!(next, Cell::new(2, 7));
+    /// ```
     pub fn wrapping_up(self, grid: Grid, step: u8) -> Cell {
         self.overflowing_up(grid, step).0
     }
 
+    /// Moves current `Cell` downwards by `step` relative to the given `Grid`
+    ///
+    /// This operation is a wrapper around the `overflowing_down()` method,
+    /// and returns only new `Cell`, without `bool`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(7, 7);
+    /// let next = cell.wrapping_down(grid, 2);
+    /// assert_eq!(next, Cell::new(7, 9));
+    /// let next = cell.wrapping_down(grid, 5);
+    /// assert_eq!(next, Cell::new(7, 2));
+    /// ```
     pub fn wrapping_down(self, grid: Grid, step: u8) -> Cell {
         self.overflowing_down(grid, step).0
     }
 
+    /// Moves current `Cell` to the left by `step` relative to the given `Grid`
+    ///
+    /// This operation is a wrapper around the `overflowing_left()` method,
+    /// and returns only new `Cell`, without `bool`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(2, 2);
+    /// let next = cell.wrapping_left(grid, 2);
+    /// assert_eq!(next, Cell::new(0, 2));
+    /// let next = cell.wrapping_left(grid, 5);
+    /// assert_eq!(next, Cell::new(7, 2));
+    /// ```
     pub fn wrapping_left(self, grid: Grid, step: u8) -> Cell {
         self.overflowing_left(grid, step).0
     }
 
+    /// Moves current `Cell` to the right by `step` relative to the given `Grid`
+    ///
+    /// This operation is a wrapper around the `overflowing_right()` method,
+    /// and returns only new `Cell`, without `bool`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(7, 7);
+    /// let next = cell.wrapping_right(grid, 2);
+    /// assert_eq!(next, Cell::new(9, 7));
+    /// let next = cell.wrapping_right(grid, 5);
+    /// assert_eq!(next, Cell::new(2, 7));
+    /// ```
     pub fn wrapping_right(self, grid: Grid, step: u8) -> Cell {
         self.overflowing_right(grid, step).0
     }
 
+    /// Projects current `Cell` onto the top side of the given `Grid`
+    ///
+    /// This operation does not mutate current `Cell` fields,
+    /// instead it calculates new position and returns new `Cell`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(2, 2);
+    /// let next = cell.project_up(grid);
+    /// assert_eq!(next, Cell::new(2, 0));
+    /// ```
     pub fn project_up(self, grid: Grid) -> Cell {
         self.saturating_up(grid, u8::MAX)
     }
 
+    /// Projects current `Cell` onto the bottom side of the given `Grid`
+    ///
+    /// This operation does not mutate current `Cell` fields,
+    /// instead it calculates new position and returns new `Cell`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(7, 7);
+    /// let next = cell.project_down(grid);
+    /// assert_eq!(next, Cell::new(7, 9));
+    /// ```
     pub fn project_down(self, grid: Grid) -> Cell {
         self.saturating_down(grid, u8::MAX)
     }
 
+    /// Projects current `Cell` onto the left side of the given `Grid`
+    ///
+    /// This operation does not mutate current `Cell` fields,
+    /// instead it calculates new position and returns new `Cell`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(2, 2);
+    /// let next = cell.project_left(grid);
+    /// assert_eq!(next, Cell::new(0, 2));
+    /// ```
     pub fn project_left(self, grid: Grid) -> Cell {
         self.saturating_left(grid, u8::MAX)
     }
 
+    /// Projects current `Cell` onto the right side of the given `Grid`
+    ///
+    /// This operation does not mutate current `Cell` fields,
+    /// instead it calculates new position and returns new `Cell`
+    ///
+    /// # Panics
+    /// Panics if the `Cell` is not within the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(7, 7);
+    /// let next = cell.project_right(grid);
+    /// assert_eq!(next, Cell::new(9, 7));
+    /// ```
     pub fn project_right(self, grid: Grid) -> Cell {
         self.saturating_right(grid, u8::MAX)
     }
