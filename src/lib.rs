@@ -1,3 +1,56 @@
+//! Basic representation of Grid, Cell, and assosiated mathematical operations.
+//!
+//! This module contains the [`Cell`] type, representing basic unit of [`Grid`],
+//! the [`Grid`] type, representing two-dimentional field of [`Cell`]s,
+//! the [`Cells`] type, representing iterator over every [`Cell`] on the [`Grid`],
+//! and the [`Rows`] and [`Columns`] types, representing iterators over subgrids of [`Grid`].
+//!
+//! # Usecases
+//!
+//! One of the best usecases of this crate is for developing `CLI` based games:
+//! `Cell` has two fields representing position on the `Grid`, which are both `u8`,
+//! and the `Grid` consists of the `start` and the `end` `Cell`s,
+//! making the largest possible `Grid` to be 255x255, which is enough for most terminal games.
+//!
+//! # Examples
+//!
+//! Perform some basic calculations for `Cell`:
+//! ```
+//! use grid_math::{Cell, Grid};
+//!
+//! let grid = Grid::new(10, 10);
+//! let start = grid.start();
+//! let next = start.saturating_right(grid, 5).wrapping_down(grid, 15).left(grid, 1);
+//!
+//! assert!(next.within(grid));
+//! assert_eq!(next, Cell::new(4, 5));
+//! ```
+//!
+//! Map every `Cell` on the `Grid` to the custom `String` representation:
+//! ```
+//! use grid_math::{Cell, Grid};
+//!
+//! let grid = Grid::new(3, 3);
+//! let grid_string = grid
+//!     .rows()
+//!     .map(|row| {
+//!         row.cells().map(|_| " [#]")
+//!             .chain(std::iter::once("\n\n"))
+//!             .collect::<String>()
+//!     })
+//!     .collect::<String>();
+//! assert_eq!(grid_string,
+//! " \
+//!  [#] [#] [#]
+//!
+//!  [#] [#] [#]
+//!
+//!  [#] [#] [#]
+//!
+//! "
+//! );
+//! ```
+
 use std::convert::{From, Into};
 use std::fmt;
 
