@@ -1,6 +1,13 @@
 [package]
 name = "grid-math"
 version = "0.1.0"
+description = "Library, containing basic representation of Grid, Cell, and assosiated mathematical operations. Helpful in CLI-based gamedev."
+repository = "https://github.com/WizCrab/grid-math"
+keywords = ["grid", "cell", "cli", "field", "2D"]
+categories = ["data-structures", "mathematics", "command-line-interface", "game-development"]
+exclude = ["target", "Cargo.lock"]
+readme = "README.md"
+license = "GPL-3.0"
 edition = "2024"
 
 [dependencies]
