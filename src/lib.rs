@@ -1,9 +1,10 @@
-//! Basic representation of Grid, Cell, and assosiated mathematical operations.
+//! Basic representation of Grid, Cell, and assosiated mathematical operations. Helpful in CLI-based gamedev.
 //!
-//! This module contains the [`Cell`] type, representing basic unit of [`Grid`],
-//! the [`Grid`] type, representing two-dimentional field of [`Cell`]s,
-//! the [`Cells`] type, representing iterator over every [`Cell`] on the [`Grid`],
-//! and the [`Rows`] and [`Columns`] types, representing iterators over subgrids of [`Grid`].
+//! This module contains the [`Cell`] type, representing the basic unit of [`Grid`],
+//! the [`Grid`] type, representing a two-dimentional field of [`Cell`]s,
+//! the [`Cells`] type, representing an iterator over every [`Cell`] on the [`Grid`],
+//! the [`Rows`] and the [`Columns`] types, representing iterators over subgrids of [`Grid`],
+//! and the [`GridMap<T>`] type, representing a wrapper around the [`HashMap<Cell, T>`]
 //!
 //! # Usecases
 //!
@@ -11,6 +12,13 @@
 //! `Cell` has two fields representing position on the `Grid`, which are both `u8`,
 //! and the `Grid` consists of the `start` and the `end` `Cell`s,
 //! making the largest possible `Grid` to be 255x255, which is enough for most terminal games.
+//!
+//! # Note
+//!
+//! - `Cell`'s global position currently represented in the `u8` for simplicity,
+//!   and because this is enough for most terminal games. This may be changed to be a scalar generic in the future.
+//! - Error handling is currently rather stupid (just checks with panic!), but this may change in the future.
+//! - Crate is in the "work in progress" state, so the public API may change in the future. Feel free to contribute!
 //!
 //! # Examples
 //!
@@ -20,7 +28,7 @@
 //!
 //! let grid = Grid::new(10, 10);
 //! let start = grid.start();
-//! let next = start.saturating_right(grid, 5).wrapping_down(grid, 15).left(grid, 1);
+//! let next = start.saturating_right(grid, 5).wrapping_down(grid, 15).strict_left(grid, 1);
 //!
 //! assert!(next.within(grid));
 //! assert_eq!(next, Cell::new(4, 5));
@@ -50,20 +58,35 @@
 //! "
 //! );
 //! ```
+//!
+//! Store some actual data on the `Grid`, using `GridMap`:
+//! ```
+//! use grid_math::{Cell, Grid, GridMap};
+//!
+//! let grid = Grid::new(5, 5);
+//! let mut map: GridMap<char> = GridMap::from(grid);
+//! map.insert(map.grid().start(), '#');
+//! map.insert(map.grid().end(), '@');
+//!
+//! assert_eq!(map.len(), 2);
+//! assert_eq!(map.get(&Cell::new(0, 0)).unwrap(), &'#');
+//! ```
 
+use std::collections::HashMap;
 use std::convert::{From, Into};
 use std::fmt;
+use std::ops::{Deref, DerefMut};
 
 /// `Cell` represents the basic unit of `Grid`.
 ///
-/// Consists of global coordinates `x: u8` and `y: u8`, alongside with methods implementing
+/// Consists of global positions `global_width: u8` and `global_depth: u8`, alongside with methods implementing
 /// common mathematical operations for safe interactions with grids and other cells
 ///
 /// Due to low memory size, `Cell` implements `Copy` trait, so all methods take `self` (copy) as first argument
 ///
 /// # Examples
 ///
-/// You can create Cell using new(x, y):
+/// You can create Cell using new(global_width, global_depth):
 /// ```
 /// use grid_math::Cell;
 ///
@@ -78,20 +101,20 @@ use std::fmt;
 /// let cell: Cell = (6, 7).into();
 /// ```
 ///
-/// To read x or y values, use getters:
+/// To read global_width or global_depth values, use getters:
 /// ```
 /// use grid_math::Cell;
 ///
 /// let cell = Cell::new(10, 10);
-/// let x = cell.x();
-/// let y = cell.y();
+/// let w = cell.global_width();
+/// let d = cell.global_depth();
 /// ```
 /// Or use `into()` provided by `Into` trait:
 /// ```
 /// use grid_math::Cell;
 ///
 /// let cell = Cell::new(10, 10);
-/// let (x, y): (u8, u8) = cell.into();
+/// let (w, d): (u8, u8) = cell.into();
 /// ```
 ///
 /// 'Cell' implements `Display` and `Debug` trait, so you can easily print it out:
@@ -130,8 +153,8 @@ use std::fmt;
 /// let cell = Cell::new(3, 4);
 /// let grid = Grid::indented(8, 8, (2, 1)); // 8x8 grid starting at (2,1)
 /// let (width, depth) = (cell.width(grid), cell.depth(grid));
-/// // cell's width on grid = cell.x - grid.start.x
-/// // cell's depth on grid = cell.y - grid.start.y
+/// // cell's width on grid = cell.global_width - grid.start.global_width
+/// // cell's depth on grid = cell.global_depth - grid.start.global_depth
 /// assert_eq!((width, depth), (1, 3));
 /// // get gaps between width and depth grid borders and cell:
 /// let (width_gap, depth_gap) = (cell.width_gap(grid), cell.depth_gap(grid));
@@ -147,21 +170,21 @@ use std::fmt;
 ///
 /// let grid = Grid::new(10, 10);
 /// let cell = grid.start(); // get grid's first cell
-/// let next = cell.right(grid, 3); // move to the right by 3, panics if grid bounds overflow occures
+/// let next = cell.strict_right(grid, 3); // move to the right by 3, panics if grid bounds overflow occures
 /// assert_eq!(next, Cell::new(3, 0));
 /// let next = cell.saturating_down(grid, 15); // move down by 15, returns grid bound if overflow occures
 /// assert_eq!(next, Cell::new(0, 9));
-/// let next = cell.wrapping_right(grid, 5).left(grid, 2).project_down(grid); // chain of movements
+/// let next = cell.wrapping_right(grid, 5).strict_left(grid, 2).project_down(grid); // chain of movements
 /// assert_eq!(next, Cell::new(3, 9));
 /// ```
 ///
 /// To get more examples, look at `Cell` and `Grid` methods documentation.
 ///
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cell {
-    x: u8,
-    y: u8,
+    global_width: u8,
+    global_depth: u8,
 }
 
 /// `Grid` represents the field of `Cell`
@@ -207,8 +230,8 @@ pub struct Cell {
 /// // backwards:
 /// let (start, end) = grid.into();
 /// assert_eq!((start, end), (Cell::new(1, 2), Cell::new(5, 6)));
-/// let ((x1, y1), (x2, y2)) = grid.into();
-/// assert_eq!(((x1, y1), (x2, y2)), ((1, 2), (5, 6)));
+/// let ((w1, d1), (w2, d2)) = grid.into();
+/// assert_eq!(((w1, d1), (w2, d2)), ((1, 2), (5, 6)));
 /// ```
 ///
 /// Important:
@@ -291,11 +314,11 @@ pub struct Cell {
 ///
 /// let grid = Grid::new(10, 10);
 /// let cell = grid.start(); // get grid's first cell
-/// let next = cell.right(grid, 3); // move to the right by 3, panics if grid bounds overflow occures
+/// let next = cell.strict_right(grid, 3); // move to the right by 3, panics if grid bounds overflow occures
 /// assert_eq!(next, Cell::new(3, 0));
 /// let next = cell.saturating_down(grid, 15); // move down by 15, returns grid bound if overflow occures
 /// assert_eq!(next, Cell::new(0, 9));
-/// let next = cell.wrapping_right(grid, 5).left(grid, 2).project_down(grid); // chain of movements
+/// let next = cell.wrapping_right(grid, 5).strict_left(grid, 2).project_down(grid); // chain of movements
 /// assert_eq!(next, Cell::new(3, 9));
 /// ```
 ///
@@ -327,7 +350,7 @@ pub struct Cell {
 /// To get more examples, look at `Cell` and `Grid` methods documentation.
 ///
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Grid {
     start: Cell,
     end: Cell,
@@ -346,7 +369,7 @@ pub struct Grid {
 /// let axis_cells: Vec<Cell> = grid
 ///     .cells()
 ///     .filter(|cell| {
-///         cell.x() == grid.start().x() || cell.y() == grid.start().y()
+///         cell.global_width() == grid.start().global_width() || cell.global_depth() == grid.start().global_depth()
 ///     })
 ///     .collect();
 /// assert_eq!(axis_cells, vec![
@@ -435,8 +458,43 @@ pub struct Columns {
     consumed: bool,
 }
 
+/// `GridMap<V>` represents a wrapper around the `HashMap<Cell, T>`
+///
+/// `GridMap` is helpful for storing some actual data on the `Grid`.
+/// It implements `Deref` and `DerefMut` traits, so we can call methods from `HashMap`
+/// directly on the `GridMap`. Also It reimplements `insert` method and adds aditional conditions
+/// to check if the target `key: Cell` is within the inner `Grid` bounds.
+///
+/// `GridMap` currently has rather stupid error handling inside the `insert` method, but this may change in the future
+///
+/// # Examples
+///
+/// ```
+/// use grid_math::{Cell, Grid, GridMap};
+///
+/// let grid = Grid::new(5, 5);
+/// let mut map: GridMap<char> = GridMap::from(grid);
+/// map.insert(map.grid().start(), '#');
+/// map.insert(map.grid().end(), '@');
+/// assert_eq!(map.len(), 2);
+/// assert_eq!(map.get(&Cell::new(0, 0)).unwrap(), &'#');
+/// ```
+///
+/// ```should_panic
+/// use grid_math::{Cell, Grid, GridMap};
+///
+/// let grid = Grid::new(5, 5);
+/// let cell = Cell::new(6, 6);
+/// let mut map: GridMap<char> = GridMap::from(grid);
+/// map.insert(cell, '#'); // panic!
+/// ```
+pub struct GridMap<V> {
+    grid: Grid,
+    hashmap: HashMap<Cell, V>,
+}
+
 impl Cell {
-    /// Creates new `Cell` with specified `x: u8` and `y: u8` global position
+    /// Creates new `Cell` with specified `global_width: u8` and `global_depth: u8` global position
     ///
     /// # Examples
     ///
@@ -445,8 +503,11 @@ impl Cell {
     ///
     /// let cell = Cell::new(10, 15);
     /// ```
-    pub fn new(x: u8, y: u8) -> Self {
-        Self { x, y }
+    pub fn new(global_width: u8, global_depth: u8) -> Self {
+        Self {
+            global_width,
+            global_depth,
+        }
     }
 
     /// Checks if the `Cell` is within the given `Grid`
@@ -464,8 +525,8 @@ impl Cell {
     /// assert!(!cell.within(grid));
     /// ```
     pub fn within(self, grid: Grid) -> bool {
-        (grid.start.x..=grid.end.x).contains(&self.x)
-            && (grid.start.y..=grid.end.y).contains(&self.y)
+        (grid.start.global_width..=grid.end.global_width).contains(&self.global_width)
+            && (grid.start.global_depth..=grid.end.global_depth).contains(&self.global_depth)
     }
 
     /// Checks if the `Cell` is within the given `Grid`
@@ -488,7 +549,7 @@ impl Cell {
         }
     }
 
-    /// Returns `x` field of `Cell`
+    /// Returns `global_width` field of `Cell`
     ///
     /// # Examples
     ///
@@ -496,14 +557,14 @@ impl Cell {
     /// use grid_math::Cell;
     ///
     /// let cell = Cell::new(8, 8);
-    /// let x = cell.x();
-    /// assert_eq!(x, 8);
+    /// let w = cell.global_width();
+    /// assert_eq!(w, 8);
     /// ```
-    pub fn x(self) -> u8 {
-        self.x
+    pub fn global_width(self) -> u8 {
+        self.global_width
     }
 
-    /// Returns `y` field of `Cell`
+    /// Returns `global_depth` field of `Cell`
     ///
     /// # Examples
     ///
@@ -511,11 +572,11 @@ impl Cell {
     /// use grid_math::Cell;
     ///
     /// let cell = Cell::new(8, 8);
-    /// let y = cell.y();
-    /// assert_eq!(y, 8);
+    /// let d = cell.global_depth();
+    /// assert_eq!(d, 8);
     /// ```
-    pub fn y(self) -> u8 {
-        self.y
+    pub fn global_depth(self) -> u8 {
+        self.global_depth
     }
 
     /// Calculates the `width` of the `Cell` relative to the given `Grid`
@@ -536,7 +597,7 @@ impl Cell {
     /// ```
     pub fn width(self, grid: Grid) -> u8 {
         self.within_panic(grid);
-        self.x - grid.start.x
+        self.global_width - grid.start.global_width
     }
 
     /// Calculates the gap between the `width` of `Cell` and the `width` of `Grid`
@@ -556,7 +617,7 @@ impl Cell {
     /// ```
     pub fn width_gap(self, grid: Grid) -> u8 {
         self.within_panic(grid);
-        grid.end.x - self.x
+        grid.end.global_width - self.global_width
     }
 
     /// Calculates the `depth` of `Cell` relative to the given `Grid`
@@ -577,7 +638,7 @@ impl Cell {
     /// ```
     pub fn depth(self, grid: Grid) -> u8 {
         self.within_panic(grid);
-        self.y - grid.start.y
+        self.global_depth - grid.start.global_depth
     }
 
     /// Calculates the gap between the `depth` of `Cell` and the `depth` of `Grid`
@@ -597,7 +658,7 @@ impl Cell {
     /// ```
     pub fn depth_gap(self, grid: Grid) -> u8 {
         self.within_panic(grid);
-        grid.end.y - self.y
+        grid.end.global_depth - self.global_depth
     }
 
     /// Checks if the `up` operation on `Cell` will violate the given `Grid` upper border
@@ -617,7 +678,7 @@ impl Cell {
     /// ```
     pub fn will_underflow_depth(self, grid: Grid, step: u8) -> bool {
         self.within_panic(grid);
-        self.y < step || self.y - step < grid.start.y
+        self.global_depth < step || self.global_depth - step < grid.start.global_depth
     }
 
     /// Checks if the `down` operation on `Cell` will violate the given `Grid` lower border
@@ -637,7 +698,7 @@ impl Cell {
     /// ```
     pub fn will_overflow_depth(self, grid: Grid, step: u8) -> bool {
         self.within_panic(grid);
-        self.y > u8::MAX - step || self.y + step > grid.end.y
+        self.global_depth > u8::MAX - step || self.global_depth + step > grid.end.global_depth
     }
 
     /// Checks if the `left` operation on `Cell` will violate the given `Grid` left border
@@ -657,7 +718,7 @@ impl Cell {
     /// ```
     pub fn will_underflow_width(self, grid: Grid, step: u8) -> bool {
         self.within_panic(grid);
-        self.x < step || self.x - step < grid.start.x
+        self.global_width < step || self.global_width - step < grid.start.global_width
     }
 
     /// Checks if the `right` operation on `Cell` will violate the given `Grid` right border
@@ -677,7 +738,7 @@ impl Cell {
     /// ```
     pub fn will_overflow_width(self, grid: Grid, step: u8) -> bool {
         self.within_panic(grid);
-        self.x > u8::MAX - step || self.x + step > grid.end.x
+        self.global_width > u8::MAX - step || self.global_width + step > grid.end.global_width
     }
 
     /// Moves current `Cell` upwards by `step` relative to the given `Grid`
@@ -695,7 +756,7 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(2, 2);
-    /// let next = cell.up(grid, 2);
+    /// let next = cell.strict_up(grid, 2);
     /// assert_eq!(next, Cell::new(2, 0));
     /// ```
     ///
@@ -704,17 +765,17 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(2, 2);
-    /// let next = cell.up(grid, 3); // panic!
+    /// let next = cell.strict_up(grid, 3); // panic!
     /// ```
-    pub fn up(self, grid: Grid, step: u8) -> Cell {
+    pub fn strict_up(self, grid: Grid, step: u8) -> Cell {
         if self.will_underflow_depth(grid, step) {
             panic!(
                 "this operation will violate grid upper bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
-            x: self.x,
-            y: self.y - step,
+            global_width: self.global_width,
+            global_depth: self.global_depth - step,
         }
     }
 
@@ -733,7 +794,7 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(7, 7);
-    /// let next = cell.down(grid, 2);
+    /// let next = cell.strict_down(grid, 2);
     /// assert_eq!(next, Cell::new(7, 9));
     /// ```
     ///
@@ -742,17 +803,17 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(7, 7);
-    /// let next = cell.down(grid, 3); // panic!
+    /// let next = cell.strict_down(grid, 3); // panic!
     /// ```
-    pub fn down(self, grid: Grid, step: u8) -> Cell {
+    pub fn strict_down(self, grid: Grid, step: u8) -> Cell {
         if self.will_overflow_depth(grid, step) {
             panic!(
                 "this operation will violate grid lower bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
-            x: self.x,
-            y: self.y + step,
+            global_width: self.global_width,
+            global_depth: self.global_depth + step,
         }
     }
 
@@ -771,7 +832,7 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(2, 2);
-    /// let next = cell.left(grid, 2);
+    /// let next = cell.strict_left(grid, 2);
     /// assert_eq!(next, Cell::new(0, 2));
     /// ```
     ///
@@ -780,17 +841,17 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(2, 2);
-    /// let next = cell.left(grid, 3); // panic!
+    /// let next = cell.strict_left(grid, 3); // panic!
     /// ```
-    pub fn left(self, grid: Grid, step: u8) -> Cell {
+    pub fn strict_left(self, grid: Grid, step: u8) -> Cell {
         if self.will_underflow_width(grid, step) {
             panic!(
                 "this operation will violate grid left bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
-            x: self.x - step,
-            y: self.y,
+            global_width: self.global_width - step,
+            global_depth: self.global_depth,
         }
     }
 
@@ -809,7 +870,7 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(7, 7);
-    /// let next = cell.right(grid, 2);
+    /// let next = cell.strict_right(grid, 2);
     /// assert_eq!(next, Cell::new(9, 7));
     /// ```
     ///
@@ -818,17 +879,17 @@ impl Cell {
     ///
     /// let grid = Grid::new(10, 10);
     /// let cell = Cell::new(7, 7);
-    /// let next = cell.right(grid, 3); // panic!
+    /// let next = cell.strict_right(grid, 3); // panic!
     /// ```
-    pub fn right(self, grid: Grid, step: u8) -> Cell {
+    pub fn strict_right(self, grid: Grid, step: u8) -> Cell {
         if self.will_overflow_width(grid, step) {
             panic!(
                 "this operation will violate grid right bounds! cell:{self}, grid:{grid}, step:{step}"
             );
         }
         Cell {
-            x: self.x + step,
-            y: self.y,
+            global_width: self.global_width + step,
+            global_depth: self.global_depth,
         }
     }
 
@@ -856,14 +917,14 @@ impl Cell {
     /// assert_eq!(next, Cell::new(2, 0));
     /// ```
     pub fn saturating_up(self, grid: Grid, step: u8) -> Cell {
-        let next_y = if self.will_underflow_depth(grid, step) {
-            grid.start.y
+        let next_depth = if self.will_underflow_depth(grid, step) {
+            grid.start.global_depth
         } else {
-            self.y - step
+            self.global_depth - step
         };
         Cell {
-            x: self.x,
-            y: next_y,
+            global_width: self.global_width,
+            global_depth: next_depth,
         }
     }
 
@@ -891,14 +952,14 @@ impl Cell {
     /// assert_eq!(next, Cell::new(7, 9));
     /// ```
     pub fn saturating_down(self, grid: Grid, step: u8) -> Cell {
-        let next_y = if self.will_overflow_depth(grid, step) {
-            grid.end.y
+        let next_depth = if self.will_overflow_depth(grid, step) {
+            grid.end.global_depth
         } else {
-            self.y + step
+            self.global_depth + step
         };
         Cell {
-            x: self.x,
-            y: next_y,
+            global_width: self.global_width,
+            global_depth: next_depth,
         }
     }
 
@@ -926,14 +987,14 @@ impl Cell {
     /// assert_eq!(next, Cell::new(0, 2));
     /// ```
     pub fn saturating_left(self, grid: Grid, step: u8) -> Cell {
-        let next_x = if self.will_underflow_width(grid, step) {
-            grid.start.x
+        let next_width = if self.will_underflow_width(grid, step) {
+            grid.start.global_width
         } else {
-            self.x - step
+            self.global_width - step
         };
         Cell {
-            x: next_x,
-            y: self.y,
+            global_width: next_width,
+            global_depth: self.global_depth,
         }
     }
 
@@ -961,14 +1022,14 @@ impl Cell {
     /// assert_eq!(next, Cell::new(9, 7));
     /// ```
     pub fn saturating_right(self, grid: Grid, step: u8) -> Cell {
-        let next_x = if self.will_overflow_width(grid, step) {
-            grid.end.x
+        let next_width = if self.will_overflow_width(grid, step) {
+            grid.end.global_width
         } else {
-            self.x + step
+            self.global_width + step
         };
         Cell {
-            x: next_x,
-            y: self.y,
+            global_width: next_width,
+            global_depth: self.global_depth,
         }
     }
 
@@ -997,15 +1058,15 @@ impl Cell {
     /// ```
     pub fn overflowing_up(self, grid: Grid, step: u8) -> (Cell, bool) {
         let underflowed = self.will_underflow_depth(grid, step);
-        let next_y = if underflowed {
-            grid.end.y - ((step - self.depth(grid) - 1) % grid.depth())
+        let next_depth = if underflowed {
+            grid.end.global_depth - ((step - self.depth(grid) - 1) % grid.depth())
         } else {
-            self.y - step
+            self.global_depth - step
         };
         (
             Cell {
-                x: self.x,
-                y: next_y,
+                global_width: self.global_width,
+                global_depth: next_depth,
             },
             underflowed,
         )
@@ -1036,15 +1097,15 @@ impl Cell {
     /// ```
     pub fn overflowing_down(self, grid: Grid, step: u8) -> (Cell, bool) {
         let overflowed = self.will_overflow_depth(grid, step);
-        let next_y = if overflowed {
-            grid.start.y + ((step - self.depth_gap(grid) - 1) % grid.depth())
+        let next_depth = if overflowed {
+            grid.start.global_depth + ((step - self.depth_gap(grid) - 1) % grid.depth())
         } else {
-            self.y + step
+            self.global_depth + step
         };
         (
             Cell {
-                x: self.x,
-                y: next_y,
+                global_width: self.global_width,
+                global_depth: next_depth,
             },
             overflowed,
         )
@@ -1075,15 +1136,15 @@ impl Cell {
     /// ```
     pub fn overflowing_left(self, grid: Grid, step: u8) -> (Cell, bool) {
         let underflowed = self.will_underflow_width(grid, step);
-        let next_x = if underflowed {
-            grid.end.x - ((step - self.width(grid) - 1) % grid.width())
+        let next_width = if underflowed {
+            grid.end.global_width - ((step - self.width(grid) - 1) % grid.width())
         } else {
-            self.x - step
+            self.global_width - step
         };
         (
             Cell {
-                x: next_x,
-                y: self.y,
+                global_width: next_width,
+                global_depth: self.global_depth,
             },
             underflowed,
         )
@@ -1114,15 +1175,15 @@ impl Cell {
     /// ```
     pub fn overflowing_right(self, grid: Grid, step: u8) -> (Cell, bool) {
         let overflowed = self.will_overflow_width(grid, step);
-        let next_x = if overflowed {
-            grid.start.x + ((step - self.width_gap(grid) - 1) % grid.width())
+        let next_width = if overflowed {
+            grid.start.global_width + ((step - self.width_gap(grid) - 1) % grid.width())
         } else {
-            self.x + step
+            self.global_width + step
         };
         (
             Cell {
-                x: next_x,
-                y: self.y,
+                global_width: next_width,
+                global_depth: self.global_depth,
             },
             overflowed,
         )
@@ -1325,7 +1386,12 @@ impl fmt::Display for Cell {
     /// assert_eq!(format!("{cell}"), "(5, 6)");
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({x}, {y})", x = self.x, y = self.y)
+        write!(
+            f,
+            "({w}, {d})",
+            w = self.global_width,
+            d = self.global_depth
+        )
     }
 }
 
@@ -1339,12 +1405,12 @@ impl From<(u8, u8)> for Cell {
     ///
     /// let pos = (5, 6);
     /// let cell = Cell::from(pos);
-    /// assert_eq!((pos.0, pos.1), (cell.x(), cell.y()));
+    /// assert_eq!((pos.0, pos.1), (cell.global_width(), cell.global_depth()));
     /// ```
     fn from(value: (u8, u8)) -> Self {
         Self {
-            x: value.0,
-            y: value.1,
+            global_width: value.0,
+            global_depth: value.1,
         }
     }
 }
@@ -1360,10 +1426,10 @@ impl Into<(u8, u8)> for Cell {
     ///
     /// let cell = Cell::new(5, 6);
     /// let pos: (u8, u8) = cell.into();
-    /// assert_eq!((pos.0, pos.1), (cell.x(), cell.y()));
+    /// assert_eq!((pos.0, pos.1), (cell.global_width(), cell.global_depth()));
     /// ```
     fn into(self) -> (u8, u8) {
-        (self.x, self.y)
+        (self.global_width, self.global_depth)
     }
 }
 
@@ -1386,10 +1452,13 @@ impl Grid {
             panic!("can't create grid with width < 0 or depth < 0!")
         }
         Self {
-            start: Cell { x: 0, y: 0 },
+            start: Cell {
+                global_width: 0,
+                global_depth: 0,
+            },
             end: Cell {
-                x: width - 1,
-                y: depth - 1,
+                global_width: width - 1,
+                global_depth: depth - 1,
             },
         }
     }
@@ -1418,12 +1487,12 @@ impl Grid {
         }
         Self {
             start: Cell {
-                x: indent.0,
-                y: indent.1,
+                global_width: indent.0,
+                global_depth: indent.1,
             },
             end: Cell {
-                x: indent.0 + width - 1,
-                y: indent.1 + depth - 1,
+                global_width: indent.0 + width - 1,
+                global_depth: indent.1 + depth - 1,
             },
         }
     }
@@ -1481,7 +1550,9 @@ impl Grid {
     /// assert_eq!(member, Cell::new(6, 6));
     /// ```
     pub fn member(self, width: u8, depth: u8) -> Cell {
-        self.start.right(self, width).down(self, depth)
+        self.start
+            .strict_right(self, width)
+            .strict_down(self, depth)
     }
 
     /// Returns new `Grid` with `width: u8` and `depth: u8`, which is a subgrid
@@ -1506,7 +1577,10 @@ impl Grid {
         }
         Grid {
             start: self.start,
-            end: self.start.right(self, width - 1).down(self, depth - 1),
+            end: self
+                .start
+                .strict_right(self, width - 1)
+                .strict_down(self, depth - 1),
         }
     }
 
@@ -1537,11 +1611,14 @@ impl Grid {
             panic!("can't create grid with width < 0 or depth < 0!")
         }
         Grid {
-            start: self.start.right(self, indent.0).down(self, indent.1),
+            start: self
+                .start
+                .strict_right(self, indent.0)
+                .strict_down(self, indent.1),
             end: self
                 .start
-                .right(self, indent.0 + width - 1)
-                .down(self, indent.1 + depth - 1),
+                .strict_right(self, indent.0 + width - 1)
+                .strict_down(self, indent.1 + depth - 1),
         }
     }
 
@@ -1587,7 +1664,7 @@ impl Grid {
     /// assert_eq!(width, 10);
     /// ```
     pub fn width(self) -> u8 {
-        self.end.x - self.start.x + 1
+        self.end.global_width - self.start.global_width + 1
     }
 
     /// Calculates `depth` of `Grid`
@@ -1602,7 +1679,7 @@ impl Grid {
     /// assert_eq!(depth, 10);
     /// ```
     pub fn depth(self) -> u8 {
-        self.end.y - self.start.y + 1
+        self.end.global_depth - self.start.global_depth + 1
     }
 
     /// Calculates `size: u16` of `Grid`
@@ -1633,7 +1710,7 @@ impl Grid {
     /// let axis_cells: Vec<Cell> = grid
     ///     .cells()
     ///     .filter(|cell| {
-    ///         cell.x() == grid.start().x() || cell.y() == grid.start().y()
+    ///         cell.global_width() == grid.start().global_width() || cell.global_depth() == grid.start().global_depth()
     ///     })
     ///     .collect();
     /// assert_eq!(axis_cells, vec![
@@ -1722,7 +1799,7 @@ impl From<(Cell, Cell)> for Grid {
     /// ```
     fn from(value: (Cell, Cell)) -> Self {
         let (start, end) = value;
-        if start.x > end.x || start.y > end.y {
+        if start.global_width > end.global_width || start.global_depth > end.global_depth {
             panic!("start cell overflows end cell! start:{start}, end:{end}")
         }
         Self { start, end }
@@ -1761,7 +1838,7 @@ impl From<((u8, u8), (u8, u8))> for Grid {
     /// ```
     fn from(value: ((u8, u8), (u8, u8))) -> Self {
         let (start, end): (Cell, Cell) = (value.0.into(), value.1.into());
-        if start.x > end.x || start.y > end.y {
+        if start.global_width > end.global_width || start.global_depth > end.global_depth {
             panic!("start cell overflows end cell! start:{start}, end:{end}")
         }
         Self { start, end }
@@ -1802,7 +1879,7 @@ impl fmt::Display for Grid {
     }
 }
 
-impl Cells {
+impl From<Grid> for Cells {
     /// Creates new iterator over every `Cell` on the `Grid`
     ///
     /// # Examples:
@@ -1813,7 +1890,7 @@ impl Cells {
     /// let grid = Grid::new(5, 5);
     /// let cells = Cells::from(grid);
     /// ```
-    pub fn from(grid: Grid) -> Self {
+    fn from(grid: Grid) -> Self {
         Self {
             grid,
             current: grid.start,
@@ -1822,7 +1899,7 @@ impl Cells {
     }
 }
 
-impl Columns {
+impl From<Grid> for Columns {
     /// Creates new iterator over every column on the `Grid`
     ///
     /// # Examples:
@@ -1833,7 +1910,7 @@ impl Columns {
     /// let grid = Grid::new(5, 5);
     /// let columns = Columns::from(grid);
     /// ```
-    pub fn from(grid: Grid) -> Self {
+    fn from(grid: Grid) -> Self {
         Self {
             grid,
             current: Grid {
@@ -1845,7 +1922,7 @@ impl Columns {
     }
 }
 
-impl Rows {
+impl From<Grid> for Rows {
     /// Creates new iterator over every row on the `Grid`
     ///
     /// # Examples:
@@ -1856,7 +1933,7 @@ impl Rows {
     /// let grid = Grid::new(5, 5);
     /// let rows = Rows::from(grid);
     /// ```
-    pub fn from(grid: Grid) -> Self {
+    fn from(grid: Grid) -> Self {
         Self {
             grid,
             current: Grid {
@@ -1924,3 +2001,115 @@ impl Iterator for Rows {
         Some(previous)
     }
 }
+
+impl<V> From<Grid> for GridMap<V> {
+    /// Creates new `GridMap` from the given `Grid` with empty `HashMap<Cell, T>`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let map: GridMap<char> = GridMap::from(grid);
+    /// ```
+    fn from(grid: Grid) -> Self {
+        Self {
+            grid,
+            hashmap: HashMap::new(),
+        }
+    }
+}
+
+impl<V> GridMap<V> {
+    /// Shadows `insert` method from the `HashMap`, and reimplements it
+    /// so it checks first if the key (`Cell`) is within the `Grid`, and then inserts it into the `HashMap`.
+    /// This method currently has bad error handling, but this may change in the future
+    ///
+    /// # Panics
+    /// Panics, if the key (`Cell`) is not within the inner `Grid`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let mut map: GridMap<char> = GridMap::from(grid);
+    /// map.insert(map.grid().start(), '#');
+    /// map.insert(map.grid().end(), '@');
+    /// assert_eq!(map.len(), 2);
+    /// ```
+    ///
+    /// ```should_panic
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let cell = Cell::new(6, 6);
+    /// let mut map: GridMap<char> = GridMap::from(grid);
+    /// map.insert(cell, '#'); // panic!
+    /// ```
+    pub fn insert(&mut self, cell: Cell, value: V) -> Option<V> {
+        cell.within_panic(self.grid);
+        self.hashmap.insert(cell, value)
+    }
+
+    /// Returns the inner `Grid`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let map: GridMap<char> = GridMap::from(grid);
+    ///
+    /// assert_eq!(grid, map.grid());
+    /// ```
+    pub fn grid(&self) -> Grid {
+        self.grid
+    }
+}
+
+/// Implements `Deref` trait for GridMap, to return ref to the inner `HashMap`,
+/// so we can call methods from `HashMap` directly on the `GridMap`
+///
+/// # Examples:
+///
+/// ```
+/// use grid_math::{Grid, GridMap};
+///
+/// let grid = Grid::new(5, 5);
+/// let mut map: GridMap<char> = GridMap::from(grid);
+/// map.insert(map.grid().start(), '#');
+///
+/// assert_eq!(map.len(), 1);
+/// ```
+impl<V> Deref for GridMap<V> {
+    type Target = HashMap<Cell, V>;
+    fn deref(&self) -> &Self::Target {
+        &self.hashmap
+    }
+}
+
+/// Implements `DerefMut` trait for GridMap, to return mut ref to the inner `HashMap`,
+/// so we can call methods from `HashMap` directly on the `GridMap`
+///
+/// # Examples:
+///
+/// ```
+/// use grid_math::{Grid, GridMap};
+///
+/// let grid = Grid::new(5, 5);
+/// let mut map: GridMap<char> = GridMap::from(grid);
+/// map.insert(map.grid().start(), '#');
+///
+/// assert_eq!(map.len(), 1);
+/// ```
+impl<V> DerefMut for GridMap<V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.hashmap
+    }
+}
+
+// 🦀!⭐!!!
