@@ -488,6 +488,7 @@ pub struct Columns {
 /// let mut map: GridMap<char> = GridMap::from(grid);
 /// map.insert(cell, '#'); // panic!
 /// ```
+#[derive(Debug, Clone)]
 pub struct GridMap<V> {
     grid: Grid,
     hashmap: HashMap<Cell, V>,
