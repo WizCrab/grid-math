@@ -3,7 +3,7 @@
 </h1>
 <p align="center">
   <a href="https://crates.io/crates/grid-math">
-    <img src="https://custom-icon-badges.demolab.com/badge/-|%20|%20|%20|%20|%20|%20|-636363?style=for-the-badge"><img src="https://custom-icon-badges.demolab.com/badge/-🦀%20🦀%20🦀%20==========%20>-FED688?style=for-the-badge"><img src="https://custom-icon-badges.demolab.com/badge/-GRID%20MATH%20CRATES%20IO-FED688?style=for-the-badge&logo=package&logoColor=black"><img src="https://custom-icon-badges.demolab.com/badge/-<%20==========%20🦀%20🦀%20🦀-FED688?style=for-the-badge"><img src="https://custom-icon-badges.demolab.com/badge/-|%20|%20|%20|%20|%20|%20|-636363?style=for-the-badge">
+    <img src="https://custom-icon-badges.demolab.com/badge/-🦀%20🦀%20🦀%20======%20>-FED688?style=for-the-badge"><img src="https://custom-icon-badges.demolab.com/badge/-GRID%20MATH%20CRATES%20IO-FED688?style=for-the-badge&logo=package&logoColor=black"><img src="https://custom-icon-badges.demolab.com/badge/-<%20======%20🦀%20🦀%20🦀-FED688?style=for-the-badge">
   </a>
 </p>
 <h3>
