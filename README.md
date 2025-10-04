@@ -14,7 +14,7 @@ This crate contains the `Cell` type, representing the basic unit of `Grid`,
 the `Grid` type, representing a two-dimentional field of `Cell`s,
 the `Cells` type, representing an iterator over every `Cell` on the `Grid`,
 the `Rows` and the `Columns` types, representing iterators over subgrids of `Grid`,
-and the `GridMap<T>` type, representing a wrapper around the `HashMap<Cell, T>`
+and the `GridMap<V>` type, representing a wrapper around the `HashMap<Cell, V>`
 <br><br>
 One of the best usecases of this crate is for developing `CLI` based games:
 `Cell` has two fields representing position on the `Grid`, which are both `u8`,
@@ -103,7 +103,7 @@ Here is a simple diagram, showing position of `next` cell with color yellow:
 <img src='drawings/grid3.svg' width='400'/>
 <br>
 
-To store some actual data on the `Grid`, we can use `GridMap<T>` structure, which is a wrapper around the `HashMap<Cell, T>`:
+To store some actual data on the `Grid`, we can use `GridMap<V>` structure, which is a wrapper around the `HashMap<Cell, V>`:
 
 ```rust
 use grid_math::{Cell, Grid, GridMap};
@@ -118,5 +118,9 @@ fn main() {
     assert_eq!(map.get(&Cell::new(0, 0)).unwrap(), &'#');
 }
 ```
+<br>
+
+The main difference between the `GridMap<V>` and the `HashMap<Cell, V>` is that the `GridMap<V>` has actual bounds, that are defined by the inner `Grid`.
+<br>
 
 For more examples, visit `grid-math` documentation on https://docs.rs/grid-math/latest/grid_math/  Crab Crab! 🦀🦀
