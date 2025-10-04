@@ -1375,6 +1375,26 @@ impl Cell {
     pub fn project_right(self, grid: Grid) -> Cell {
         self.saturating_right(grid, u8::MAX)
     }
+
+    /// Checks if the `Cell` is on the edge of the given `Grid`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(7, 9);
+    /// assert!(cell.on_the_edge(grid));
+    /// let cell = Cell::new(4, 3);
+    /// assert!(!cell.on_the_edge(grid));
+    /// ```
+    pub fn on_the_edge(self, grid: Grid) -> bool {
+        self.global_width == grid.start.global_width
+            || self.global_width == grid.end.global_width
+            || self.global_depth == grid.start.global_depth
+            || self.global_depth == grid.end.global_depth
+    }
 }
 
 impl fmt::Display for Cell {
