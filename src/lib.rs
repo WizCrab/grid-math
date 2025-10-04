@@ -4,7 +4,7 @@
 //! the [`Grid`] type, representing a two-dimentional field of [`Cell`]s,
 //! the [`Cells`] type, representing an iterator over every [`Cell`] on the [`Grid`],
 //! the [`Rows`] and the [`Columns`] types, representing iterators over subgrids of [`Grid`],
-//! and the [`GridMap<T>`] type, representing a wrapper around the [`HashMap<Cell, T>`]
+//! and the [`GridMap<V>`] type, representing a wrapper around the [`HashMap<Cell, V>`]
 //!
 //! # Usecases
 //!
@@ -17,7 +17,7 @@
 //!
 //! - `Cell`'s global position currently represented in the `u8` for simplicity,
 //!   and because this is enough for most terminal games. This may be changed to be a scalar generic in the future.
-//! - Error handling is currently rather stupid (just checks with panic!), but this may change in the future.
+//! - Error handling is currently rather stupid (just checks with panic!), but this helps to prevent scary logical bugs.
 //! - Crate is in the "work in progress" state, so the public API may change in the future. Feel free to contribute!
 //!
 //! # Examples
@@ -458,14 +458,16 @@ pub struct Columns {
     consumed: bool,
 }
 
-/// `GridMap<V>` represents a wrapper around the `HashMap<Cell, T>`
+/// `GridMap<V>` represents a wrapper around the `HashMap<Cell, V>`
 ///
 /// `GridMap` is helpful for storing some actual data on the `Grid`.
 /// It implements `Deref` and `DerefMut` traits, so we can call methods from `HashMap`
-/// directly on the `GridMap`. Also It reimplements `insert` method and adds aditional conditions
-/// to check if the target `key: Cell` is within the inner `Grid` bounds.
+/// directly on the `GridMap`.
 ///
-/// `GridMap` currently has rather stupid error handling inside the `insert` method, but this may change in the future
+/// The main difference between the `GridMap<V>` and the `HashMap<Cell, V>` is that
+/// the `GridMap<V>` has actual bounds, that are defined by the inner `Grid`.
+///
+/// `GridMap` currently has rather stupid error handling, but this helps to prevent scary logical bugs.
 ///
 /// # Examples
 ///
@@ -2004,7 +2006,7 @@ impl Iterator for Rows {
 }
 
 impl<V> From<Grid> for GridMap<V> {
-    /// Creates new `GridMap` from the given `Grid` with empty `HashMap<Cell, T>`
+    /// Creates new `GridMap` from the given `Grid` with empty `HashMap<Cell, V>`
     ///
     /// # Examples:
     ///
@@ -2023,6 +2025,24 @@ impl<V> From<Grid> for GridMap<V> {
 }
 
 impl<V> GridMap<V> {
+    /// Creates new `GridMap` with `Grid` of specified sizes, and with empty `HashMap<Cell, V>`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Grid, GridMap};
+    ///
+    /// let map: GridMap<char> = GridMap::new(5, 5);
+    ///
+    /// assert_eq!(map.grid(), Grid::new(5, 5));
+    /// ```
+    pub fn new(width: u8, depth: u8) -> Self {
+        Self {
+            grid: Grid::new(width, depth),
+            hashmap: HashMap::new(),
+        }
+    }
+
     /// Shadows `insert` method from the `HashMap`, and reimplements it
     /// so it checks first if the key (`Cell`) is within the `Grid`, and then inserts it into the `HashMap`.
     /// This method currently has bad error handling, but this may change in the future
@@ -2069,6 +2089,29 @@ impl<V> GridMap<V> {
     /// ```
     pub fn grid(&self) -> Grid {
         self.grid
+    }
+
+    /// Checks if the `Cell` is occupied. This is an alias for `contains_key` method
+    ///
+    /// # Panics
+    /// Panics, if the given `Cell` is not within the inner `Grid`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let cell = Cell::new(2, 3);
+    /// let mut map: GridMap<char> = GridMap::from(grid);
+    /// map.insert(cell, '#');
+    ///
+    /// assert!(map.occupied(cell));
+    /// assert!(!map.occupied(map.grid().start()))
+    /// ```
+    pub fn occupied(&self, cell: Cell) -> bool {
+        cell.within_panic(self.grid);
+        self.contains_key(&cell)
     }
 }
 
