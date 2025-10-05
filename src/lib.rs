@@ -2044,6 +2044,45 @@ impl<V> From<Grid> for GridMap<V> {
     }
 }
 
+impl<V> From<(Grid, HashMap<Cell, V>)> for GridMap<V> {
+    /// Creates new `GridMap` from the existing `HashMap<Cell, V>` and the given `Grid`
+    ///
+    /// # Panics
+    /// Panics if the given `HashMap<Cell, V>` contains `Cell`s that are not within the given `Grid`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    /// use std::collections::HashMap;
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let mut hashmap: HashMap<Cell, char> = HashMap::new();
+    /// let target = Cell::new(1, 2);
+    /// hashmap.insert(target, '#');
+    /// let map: GridMap<char> = GridMap::from((grid, hashmap));
+    /// assert_eq!(map.get(&target), Some(&'#'));
+    /// ```
+    ///
+    /// ```should_panic
+    /// use grid_math::{Cell, Grid, GridMap};
+    /// use std::collections::HashMap;
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let mut hashmap: HashMap<Cell, char> = HashMap::new();
+    /// let target = Cell::new(6, 2);
+    /// hashmap.insert(target, '#');
+    /// let map: GridMap<char> = GridMap::from((grid, hashmap)); // panic!
+    /// ```
+    fn from(data: (Grid, HashMap<Cell, V>)) -> Self {
+        data.1.keys().for_each(|cell| cell.within_panic(data.0));
+        Self {
+            grid: data.0,
+            hashmap: data.1,
+        }
+    }
+}
+
 impl<V> GridMap<V> {
     /// Creates new `GridMap` with `Grid` of specified sizes, and with empty `HashMap<Cell, V>`
     ///
