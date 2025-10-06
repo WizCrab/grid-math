@@ -72,9 +72,11 @@
 //! assert_eq!(map.get(&Cell::new(0, 0)).unwrap(), &'#');
 //! ```
 
+use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 use std::convert::{From, Into};
 use std::fmt;
+use std::iter::Filter;
 use std::ops::{Deref, DerefMut};
 
 /// `Cell` represents the basic unit of `Grid`.
@@ -2166,11 +2168,180 @@ impl<V> GridMap<V> {
     /// map.insert(cell, '#');
     ///
     /// assert!(map.occupied(cell));
-    /// assert!(!map.occupied(map.grid().start()))
+    /// assert!(!map.occupied(map.grid().start()));
     /// ```
     pub fn occupied(&self, cell: Cell) -> bool {
         cell.within_panic(self.grid);
         self.contains_key(&cell)
+    }
+
+    /// Checks if the `Cell` is free
+    ///
+    /// # Panics
+    /// Panics, if the given `Cell` is not within the inner `Grid`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let cell = Cell::new(2, 3);
+    /// let mut map: GridMap<char> = GridMap::from(grid);
+    /// map.insert(cell, '#');
+    ///
+    /// assert!(!map.vacant(cell));
+    /// assert!(map.vacant(map.grid().start()));
+    /// ```
+    pub fn vacant(&self, cell: Cell) -> bool {
+        cell.within_panic(self.grid);
+        !self.contains_key(&cell)
+    }
+
+    /// Returns count of occupied `Cell`s
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.occupied_count(), 2);
+    /// ```
+    pub fn occupied_count(&self) -> u16 {
+        self.len() as u16
+    }
+
+    /// Returns count of vacant `Cell`s
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.vacant_count(), 23);
+    /// ```
+    pub fn vacant_count(&self) -> u16 {
+        self.grid.size() - self.occupied_count()
+    }
+
+    /// Returns an iterator over every occupied `Cell`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.all_occupied().count(), 2);
+    /// ```
+    pub fn all_occupied(&self) -> Filter<Cells, impl FnMut(&Cell) -> bool> {
+        self.grid.cells().filter(|&cell| self.occupied(cell))
+    }
+
+    /// Returns an iterator over every vacant `Cell`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.all_vacant().count(), 23);
+    /// ```
+    pub fn all_vacant(&self) -> Filter<Cells, impl FnMut(&Cell) -> bool> {
+        self.grid.cells().filter(|&cell| self.vacant(cell))
+    }
+
+    /// Returns first occupied `Cell`
+    ///
+    /// # Note
+    /// This returns first `Cell` in `Grid` order, so (2, 3) will go after (4, 1)
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.first_occupied(), Some(Cell::new(4, 1)));
+    /// ```
+    pub fn first_occupied(&self) -> Option<Cell> {
+        self.all_occupied().next()
+    }
+
+    /// Returns first vacant `Cell`
+    ///
+    /// # Note
+    /// This returns first `Cell` in `Grid` order
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.first_vacant(), Some(Cell::new(0, 0)));
+    /// ```
+    pub fn first_vacant(&self) -> Option<Cell> {
+        self.all_vacant().next()
+    }
+
+    /// Returns random occupied `Cell`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_ne!(map.get(&map.random_occupied().unwrap()), None);
+    /// assert_ne!(map.get(&map.random_occupied().unwrap()), None);
+    /// assert_ne!(map.get(&map.random_occupied().unwrap()), None);
+    /// ```
+    pub fn random_occupied(&self) -> Option<Cell> {
+        self.all_occupied().choose(&mut rand::rng())
+    }
+
+    /// Returns random vacant `Cell`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let mut map: GridMap<char> = GridMap::new(5, 5);
+    /// map.insert(Cell::new(2, 3), '#');
+    /// map.insert(Cell::new(4, 1), '@');
+    ///
+    /// assert_eq!(map.get(&map.random_vacant().unwrap()), None);
+    /// assert_eq!(map.get(&map.random_vacant().unwrap()), None);
+    /// assert_eq!(map.get(&map.random_vacant().unwrap()), None);
+    /// ```
+    pub fn random_vacant(&self) -> Option<Cell> {
+        self.all_vacant().choose(&mut rand::rng())
     }
 }
 
