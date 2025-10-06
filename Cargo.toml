@@ -1,6 +1,6 @@
 [package]
 name = "grid-math"
-version = "0.2.4"
+version = "0.2.5"
 description = "Library, containing basic representation of Grid, Cell, and assosiated mathematical operations. Helpful in CLI-based gamedev."
 repository = "https://github.com/WizCrab/grid-math"
 keywords = ["grid", "cell", "cli", "field", "2D"]
