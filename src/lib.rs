@@ -2136,6 +2136,42 @@ impl<V> GridMap<V> {
         self.hashmap.insert(cell, value)
     }
 
+    /// Inserts new object only if the `Cell` is not occupied.
+    /// Returns `true` if inserted, and `false` if not
+    ///
+    /// # Panics
+    /// Panics, if the key (`Cell`) is not within the inner `Grid`
+    ///
+    /// # Examples:
+    ///
+    /// ```
+    /// use grid_math::{Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let mut map: GridMap<char> = GridMap::from(grid);
+    /// assert!(map.vacant_insert(map.grid().start(), '#'));
+    /// assert!(!map.vacant_insert(map.grid().start(), '@'));
+    /// assert_eq!(map.get(&map.grid().start()), Some(&'#'));
+    /// ```
+    ///
+    /// ```should_panic
+    /// use grid_math::{Cell, Grid, GridMap};
+    ///
+    /// let grid = Grid::new(5, 5);
+    /// let cell = Cell::new(6, 6);
+    /// let mut map: GridMap<char> = GridMap::from(grid);
+    /// map.vacant_insert(cell, '#'); // panic!
+    /// ```
+    pub fn vacant_insert(&mut self, cell: Cell, value: V) -> bool {
+        cell.within_panic(self.grid);
+        if self.vacant(cell) {
+            self.hashmap.insert(cell, value);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Returns the inner `Grid`
     ///
     /// # Examples:
