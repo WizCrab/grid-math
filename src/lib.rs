@@ -76,9 +76,9 @@ use rand::seq::IteratorRandom;
 //use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::{From, Into};
+use std::fmt;
 use std::iter::Filter;
 use std::ops::{Deref, DerefMut};
-use std::{fmt, u8};
 
 /// `Cell` represents the basic unit of `Grid`.
 ///
