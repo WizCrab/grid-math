@@ -73,11 +73,12 @@
 //! ```
 
 use rand::seq::IteratorRandom;
+//use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::{From, Into};
-use std::fmt;
 use std::iter::Filter;
 use std::ops::{Deref, DerefMut};
+use std::{fmt, u8};
 
 /// `Cell` represents the basic unit of `Grid`.
 ///
@@ -512,6 +513,73 @@ impl Cell {
         Self {
             global_width,
             global_depth,
+        }
+    }
+
+    /// Checks if the `Cell` is the same as another one
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::Cell;
+    ///
+    /// let first = Cell::new(5, 5);
+    /// let second = Cell::new(5, 5);
+    /// assert!(first.at(second));
+    ///
+    /// let second = Cell::new(2, 3);
+    /// assert!(!first.at(second));
+    /// ```
+    pub fn at(self, other: Cell) -> bool {
+        self == other
+    }
+
+    /// Checks if the `Cell` is on the same column, or row with another one
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::Cell;
+    ///
+    /// let first = Cell::new(5, 5);
+    /// let second = Cell::new(5, 2);
+    /// assert!(first.aligns(second));
+    ///
+    /// let second = Cell::new(3, 5);
+    /// assert!(first.aligns(second));
+    ///
+    /// let second = Cell::new(2, 3);
+    /// assert!(!first.aligns(second));
+    /// ```
+    pub fn aligns(self, other: Cell) -> bool {
+        self.global_width == other.global_width || self.global_depth == other.global_depth
+    }
+
+    /// Checks if the `Cell` is on the same column, or row with another one
+    ///
+    /// # Panics
+    /// Panics if `Cell`s have no common lines
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::Cell;
+    ///
+    /// let first = Cell::new(5, 5);
+    /// let second = Cell::new(5, 2);
+    /// first.aligns_panic(second);
+    /// ```
+    ///
+    /// ```should_panic
+    /// use grid_math::Cell;
+    ///
+    /// let first = Cell::new(5, 5);
+    /// let second = Cell::new(3, 2);
+    /// first.aligns_panic(second);
+    /// ```
+    pub fn aligns_panic(self, other: Cell) {
+        if !self.aligns(other) {
+            panic!("cells have no common lines! cell:{self}, other:{other}")
         }
     }
 
@@ -1376,6 +1444,121 @@ impl Cell {
     /// ```
     pub fn project_right(self, grid: Grid) -> Cell {
         self.saturating_right(grid, u8::MAX)
+    }
+
+    /// Moves current `Cell` towards another by `step` relative to the given `Grid`,
+    /// executing corresponding strict_move operation
+    ///
+    /// `target: Cell` acts as a direction, and can only represent `up`, `down`, `left` or `right`
+    ///
+    /// # Panics
+    /// Panics if the current, or target `Cell` is not within the given `Grid`
+    /// Panics if the `target` does not align with the current `Cell`
+    /// Panics if operation violates the given `Grid` bounds
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use grid_math::{Cell, Grid};
+    ///
+    /// let grid = Grid::new(10, 10);
+    /// let cell = Cell::new(7, 5);
+    /// let (up, down, left, right) = (
+    ///     cell.project_up(grid),
+    ///     cell.project_down(grid),
+    ///     cell.project_left(grid),
+    ///     cell.project_right(grid)
+    /// );
+    /// let next = cell.strict_towards(grid, up, 1);
+    /// assert_eq!(next, cell.strict_up(grid, 1));
+    /// let next = cell.strict_towards(grid, down, 1);
+    /// assert_eq!(next, cell.strict_down(grid, 1));
+    /// let next = cell.strict_towards(grid, left, 1);
+    /// assert_eq!(next, cell.strict_left(grid, 1));
+    /// let next = cell.strict_towards(grid, right, 1);
+    /// assert_eq!(next, cell.strict_right(grid, 1));
+    /// ```
+    pub fn strict_towards(self, grid: Grid, target: Cell, step: u8) -> Cell {
+        self.within_panic(grid);
+        target.within_panic(grid);
+        self.aligns_panic(target);
+        match ((self.into()), (target.into())) {
+            ((_, d1), (_, d2)) if d1 > d2 => self.strict_up(grid, step),
+            ((_, d1), (_, d2)) if d1 < d2 => self.strict_down(grid, step),
+            ((w1, _), (w2, _)) if w1 > w2 => self.strict_left(grid, step),
+            ((w1, _), (w2, _)) if w1 < w2 => self.strict_right(grid, step),
+            _ => target,
+        }
+    }
+
+    /// Moves current `Cell` towards another by `step` relative to the given `Grid`,
+    /// executing corresponding saturating_move operation
+    ///
+    /// `target: Cell` acts as a direction, and can only represent `up`, `down`, `left` or `right`
+    ///
+    /// # Panics
+    /// Panics if the current, or target `Cell` is not within the given `Grid`
+    /// Panics if the `target` does not align with the current `Cell`
+    ///
+    pub fn saturating_towards(self, grid: Grid, target: Cell, step: u8) -> Cell {
+        self.within_panic(grid);
+        target.within_panic(grid);
+        self.aligns_panic(target);
+        match ((self.into()), (target.into())) {
+            ((_, d1), (_, d2)) if d1 > d2 => self.saturating_up(grid, step),
+            ((_, d1), (_, d2)) if d1 < d2 => self.saturating_down(grid, step),
+            ((w1, _), (w2, _)) if w1 > w2 => self.saturating_left(grid, step),
+            ((w1, _), (w2, _)) if w1 < w2 => self.saturating_right(grid, step),
+            _ => target,
+        }
+    }
+
+    /// Moves current `Cell` towards another by `step` relative to the given `Grid`,
+    /// executing corresponding overflowing_move operation
+    ///
+    /// `target: Cell` acts as a direction, and can only represent `up`, `down`, `left` or `right`
+    ///
+    /// # Panics
+    /// Panics if the current, or target `Cell` is not within the given `Grid`
+    /// Panics if the `target` does not align with the current `Cell`
+    ///
+    pub fn overflowing_towards(self, grid: Grid, target: Cell, step: u8) -> (Cell, bool) {
+        self.within_panic(grid);
+        target.within_panic(grid);
+        self.aligns_panic(target);
+        match ((self.into()), (target.into())) {
+            ((_, d1), (_, d2)) if d1 > d2 => self.overflowing_up(grid, step),
+            ((_, d1), (_, d2)) if d1 < d2 => self.overflowing_down(grid, step),
+            ((w1, _), (w2, _)) if w1 > w2 => self.overflowing_left(grid, step),
+            ((w1, _), (w2, _)) if w1 < w2 => self.overflowing_right(grid, step),
+            _ => (target, false),
+        }
+    }
+
+    /// Moves current `Cell` towards another by `step` relative to the given `Grid`,
+    /// executing corresponding wrapping_move operation
+    ///
+    /// `target: Cell` acts as a direction, and can only represent `up`, `down`, `left` or `right`
+    ///
+    /// # Panics
+    /// Panics if the current, or target `Cell` is not within the given `Grid`
+    /// Panics if the `target` does not align with the current `Cell`
+    ///
+    pub fn wrapping_towards(self, grid: Grid, target: Cell, step: u8) -> Cell {
+        self.overflowing_towards(grid, target, step).0
+    }
+
+    /// Projects current `Cell` onto the `target` side of the given `Grid`,
+    /// executing corresponding project operation
+    ///
+    /// `target: Cell` acts as a direction, and can only represent `up`, `down`, `left` or `right`
+    ///
+    /// # Panics
+    /// Panics if the current, or target `Cell` is not within the given `Grid`
+    /// Panics if the `target` does not align with the current `Cell`
+    ///
+    pub fn project_towards(self, grid: Grid, target: Cell) -> Cell {
+        self.saturating_towards(grid, target, u8::MAX)
     }
 
     /// Checks if the `Cell` is on the edge of the given `Grid`
